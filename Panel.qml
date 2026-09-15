@@ -246,8 +246,6 @@ Panel {
 
           PanelSeparator { foreground: root.bar.foreground }
 
-          PanelSeparator { foreground: root.bar.foreground }
-
           Column {
             width: parent.width
             spacing: Style.space(7)
@@ -524,45 +522,49 @@ Panel {
             font.bold: true
             Layout.preferredWidth: Style.space(54)
           }
-          TextField {
-            id: temperatureField
-            Layout.preferredWidth: Style.space(72)
-            Layout.minimumWidth: Style.space(72)
-            Layout.maximumWidth: Style.space(72)
-            Layout.preferredHeight: Style.space(32)
-            Layout.minimumHeight: Style.space(32)
-            text: String(point[0])
-            color: root.bar.foreground
-            placeholderText: "°C"
-            horizontalAlignment: TextInput.AlignHCenter
-            enabled: index > 0
-            selectByMouse: true
-            validator: IntValidator { bottom: index > 0 ? curveEditor.points[index - 1][0] + 1 : 0; top: index + 1 < curveEditor.points.length ? curveEditor.points[index + 1][0] - 1 : 100 }
-            onEditingFinished: {
-              var value = Number(text)
-              if (!isNaN(value)) root.changeCurvePoint(curveEditor.role, index, value, point[1])
+          RowLayout {
+            spacing: Style.space(2)
+            TextField {
+              id: temperatureField
+              Layout.preferredWidth: Style.space(84)
+              Layout.minimumWidth: Style.space(84)
+              Layout.maximumWidth: Style.space(84)
+              Layout.preferredHeight: Style.space(32)
+              Layout.minimumHeight: Style.space(32)
+              text: String(point[0])
+              color: root.bar.foreground
+              enabled: index > 0
+              selectByMouse: true
+              horizontalAlignment: TextInput.AlignHCenter
+              validator: IntValidator { bottom: index > 0 ? curveEditor.points[index - 1][0] + 1 : 0; top: index + 1 < curveEditor.points.length ? curveEditor.points[index + 1][0] - 1 : 100 }
+              onEditingFinished: {
+                var value = Number(text)
+                if (!isNaN(value)) root.changeCurvePoint(curveEditor.role, index, value, point[1])
+              }
             }
+            Text { text: "°C"; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption }
           }
-          Text { text: "°C"; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption }
-          TextField {
-            id: dutyField
-            Layout.preferredWidth: Style.space(72)
-            Layout.minimumWidth: Style.space(72)
-            Layout.maximumWidth: Style.space(72)
-            Layout.preferredHeight: Style.space(32)
-            Layout.minimumHeight: Style.space(32)
-            text: String(point[1])
-            color: root.bar.foreground
-            placeholderText: "%"
-            horizontalAlignment: TextInput.AlignHCenter
-            selectByMouse: true
-            validator: IntValidator { bottom: 5; top: 100 }
-            onEditingFinished: {
-              var value = Number(text)
-              if (!isNaN(value)) root.changeCurvePoint(curveEditor.role, index, point[0], value)
+          RowLayout {
+            spacing: Style.space(2)
+            TextField {
+              id: dutyField
+              Layout.preferredWidth: Style.space(84)
+              Layout.minimumWidth: Style.space(84)
+              Layout.maximumWidth: Style.space(84)
+              Layout.preferredHeight: Style.space(32)
+              Layout.minimumHeight: Style.space(32)
+              text: String(point[1])
+              color: root.bar.foreground
+              selectByMouse: true
+              horizontalAlignment: TextInput.AlignHCenter
+              validator: IntValidator { bottom: 5; top: 100 }
+              onEditingFinished: {
+                var value = Number(text)
+                if (!isNaN(value)) root.changeCurvePoint(curveEditor.role, index, point[0], value)
+              }
             }
+            Text { text: "%"; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption }
           }
-          Text { text: "%"; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption }
         }
       }
     }
