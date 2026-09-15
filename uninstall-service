@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+
+if (( EUID != 0 )); then
+  echo "Run with sudo: sudo ./uninstall-service" >&2
+  exit 1
+fi
+
+systemctl disable --now omarchy-thermals.service 2>/dev/null || true
+rm -f /etc/systemd/system/omarchy-thermals.service /usr/local/libexec/omarchy-thermalsd
+systemctl daemon-reload
+echo "Removed the service. Configuration remains in /etc/omarchy-thermals."

@@ -1,0 +1,17 @@
+{
+  "controller": null,
+  "cpu_temp": {
+    "hwmon": "k10temp",
+    "input": "temp1_input"
+  },
+  "fans": {
+    "cpu": 2,
+    "case": 3
+  },
+  "profiles": {
+    "cpu": [[0, 25], [85, 25], [90, 60], [93, 80], [95, 100]],
+    "case": [[0, 40], [85, 40], [90, 65], [93, 82], [95, 100]]
+  },
+  "poll_interval": 2,
+  "socket_group": "wheel"
+}

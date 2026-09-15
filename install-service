@@ -1,0 +1,32 @@
+#!/bin/bash
+set -euo pipefail
+
+if (( EUID != 0 )); then
+  echo "Run with sudo: sudo ./install-service [--replace-coolercontrol]" >&2
+  exit 1
+fi
+
+plugin_dir=$(cd -- "$(dirname -- "$0")" && pwd)
+replace_coolercontrol=false
+[[ ${1:-} == "--replace-coolercontrol" ]] && replace_coolercontrol=true
+
+if systemctl is-active --quiet coolercontrold.service && ! $replace_coolercontrol; then
+  echo "CoolerControl is active and may own the same PWM channels." >&2
+  echo "Re-run with --replace-coolercontrol for an explicit, conflict-free handover." >&2
+  exit 1
+fi
+
+install -Dm755 "$plugin_dir/thermalsd.py" /usr/local/libexec/omarchy-thermalsd
+install -Dm644 "$plugin_dir/omarchy-thermals.service" /etc/systemd/system/omarchy-thermals.service
+install -d -m755 /etc/omarchy-thermals
+if [[ ! -e /etc/omarchy-thermals/config.json ]]; then
+  install -m644 "$plugin_dir/config.example.json" /etc/omarchy-thermals/config.json
+fi
+
+systemctl daemon-reload
+if $replace_coolercontrol && systemctl list-unit-files coolercontrold.service >/dev/null 2>&1; then
+  systemctl disable --now coolercontrold.service
+fi
+systemctl enable omarchy-thermals.service
+systemctl restart omarchy-thermals.service
+echo "Installed omarchy-thermals.service"

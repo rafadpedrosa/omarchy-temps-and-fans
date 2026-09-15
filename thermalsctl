@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""Direct hwmon telemetry and client for the optional fan-control service."""
+
+from __future__ import annotations
+
+import json
+import re
+import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+SOCKET = Path("/run/omarchy-thermals/control.sock")
+
+
+def number(path: Path) -> float | None:
+    try:
+        return float(path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def text(path: Path, fallback: str = "") -> str:
+    try:
+        return path.read_text().strip()
+    except OSError:
+        return fallback
+
+
+def hwmons() -> list[dict]:
+    result = []
+    for path in sorted(Path("/sys/class/hwmon").glob("hwmon*")):
+        result.append({"path": path, "name": text(path / "name"), "device": path.resolve()})
+    return result
+
+
+def temperature(path: Path, input_name: str = "temp1_input") -> float | None:
+    raw = number(path / input_name)
+    if raw is None or raw <= -100000:
+        return None
+    return round(raw / 1000, 1)
+
+
+def cpu_load() -> float:
+    def sample() -> tuple[int, int]:
+        values = [int(value) for value in text(Path("/proc/stat")).splitlines()[0].split()[1:]]
+        idle = values[3] + (values[4] if len(values) > 4 else 0)
+        return sum(values), idle
+    total1, idle1 = sample()
+    time.sleep(0.08)
+    total2, idle2 = sample()
+    delta = max(1, total2 - total1)
+    return round(100 * (1 - (idle2 - idle1) / delta), 1)
+
+
+def cpu_clocks() -> tuple[int, int, int]:
+    values = []
+    for path in Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_cur_freq"):
+        value = number(path)
+        if value is not None:
+            values.append(round(value / 1000))
+    return (round(sum(values) / len(values)), min(values), max(values)) if values else (0, 0, 0)
+
+
+def pci_name(device_path: Path, fallback: str) -> str:
+    matches = re.findall(r"([0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7])", str(device_path), re.I)
+    if not matches:
+        return fallback
+    try:
+        line = subprocess.run(["lspci", "-s", matches[-1]], capture_output=True, text=True, timeout=1).stdout.strip()
+        name = re.sub(r"\s*\(rev [^)]+\)$", "", line.split(": ", 1)[-1])
+        if "Phoenix" in name:
+            return "AMD Phoenix iGPU"
+        bracketed = re.findall(r"\[([^]]+)\]", name)
+        if bracketed:
+            return bracketed[-1]
+        return name or fallback
+    except (OSError, subprocess.SubprocessError):
+        return fallback
+
+
+def gpu_devices(devices: list[dict]) -> list[dict]:
+    result = []
+    drm_hwmons = {}
+    for card in sorted(Path("/sys/class/drm").glob("card[0-9]")):
+        for monitor in card.glob("device/hwmon/hwmon*"):
+            drm_hwmons[monitor.resolve()] = card
+    for index, device in enumerate(item for item in devices if item["name"] == "amdgpu"):
+        path = device["path"]
+        card = drm_hwmons.get(path.resolve())
+        temps = []
+        for input_path in sorted(path.glob("temp*_input")):
+            value = temperature(path, input_path.name)
+            if value is None:
+                continue
+            label = text(input_path.with_name(input_path.name.replace("_input", "_label")), "Temperature")
+            temps.append({"label": label.title(), "value": value})
+        rpm = number(path / "fan1_input")
+        pwm = number(path / "pwm1")
+        busy = number(card / "device/gpu_busy_percent") if card else None
+        result.append({
+            "name": pci_name(device["device"], f"GPU {index + 1}"),
+            "temps": temps,
+            "temp": temps[0]["value"] if temps else None,
+            "load": None if busy is None else round(busy, 1),
+            "fan_rpm": None if rpm is None else round(rpm),
+            "fan_duty": None if pwm is None else round(pwm * 100 / 255),
+        })
+    return result
+
+
+def request(payload: dict) -> dict:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(3)
+        client.connect(str(SOCKET))
+        client.sendall((json.dumps(payload) + "\n").encode())
+        chunks = []
+        while True:
+            chunk = client.recv(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            if b"\n" in chunk:
+                break
+    return json.loads(b"".join(chunks))
+
+
+def backend_status() -> dict:
+    try:
+        return request({"action": "status"})
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return {"ok": False, "backend": "unavailable", "error": str(error), "fans": {}}
+
+
+def collect() -> dict:
+    devices = hwmons()
+    cpu_device = next((item for item in devices if item["name"] in ("k10temp", "coretemp", "zenpower")), None)
+    cpu_temp = temperature(cpu_device["path"]) if cpu_device else None
+    avg, minimum, maximum = cpu_clocks()
+    power = None
+    if cpu_device:
+        raw_power = next((number(path) for path in cpu_device["path"].glob("power*_average") if number(path) is not None), None)
+        power = None if raw_power is None else round(raw_power / 1_000_000, 1)
+    gpus = gpu_devices(devices)
+    memory = [value for item in devices if item["name"] == "spd5118" if (value := temperature(item["path"])) is not None]
+    nvmes = []
+    for item in devices:
+        if item["name"] != "nvme":
+            continue
+        model = text(item["path"] / "device/model", "NVMe")
+        nvmes.append({"name": model.replace("_", " "), "temp": temperature(item["path"])})
+    controller = next((item for item in devices if list(item["path"].glob("pwm[0-9]")) and item["name"] != "amdgpu"), None)
+    board = []
+    if controller:
+        board = [value for path in sorted(controller["path"].glob("temp*_input")) if (value := temperature(controller["path"], path.name)) is not None]
+    backend = backend_status()
+    if backend.get("cpu_power") is not None:
+        power = backend["cpu_power"]
+    fans = backend.get("fans") or {}
+    if not fans:
+        readable = []
+        if controller:
+            for fan_path in sorted(controller["path"].glob("fan*_input")):
+                match = re.match(r"fan([0-9]+)_input", fan_path.name)
+                rpm = number(fan_path)
+                if match and rpm is not None and rpm > 0:
+                    channel = match.group(1)
+                    pwm = number(controller["path"] / f"pwm{channel}")
+                    readable.append({"duty": None if pwm is None else round(pwm * 100 / 255), "rpm": round(rpm), "mode": "unavailable"})
+        fans = {
+            "cpu": readable[0] if readable else {"duty": 0, "rpm": 0, "mode": "unavailable"},
+            "case": readable[1] if len(readable) > 1 else {"duty": 0, "rpm": 0, "mode": "unavailable"},
+        }
+    return {
+        "ok": True,
+        "backend": backend.get("backend", "unavailable"),
+        "backend_error": backend.get("error", ""),
+        "cpu": {"temp": cpu_temp, "load": cpu_load(), "power": power, "freq_avg": avg, "freq_min": minimum, "freq_max": maximum},
+        "gpu": {"temp": gpus[0]["temp"], "load": gpus[0]["load"]} if gpus else {"temp": None, "load": None},
+        "gpus": gpus,
+        "memory": memory,
+        "nvmes": nvmes,
+        "board": {"temps": board, "temp1": board[0] if board else None, "temp2": board[1] if len(board) > 1 else None},
+        "fans": fans,
+    }
+
+
+def emit(value: dict, code: int = 0) -> None:
+    print(json.dumps(value, separators=(",", ":")))
+    raise SystemExit(code)
+
+
+def main() -> None:
+    try:
+        command = sys.argv[1] if len(sys.argv) > 1 else "status"
+        if command == "status":
+            emit(collect())
+        if command == "manual" and len(sys.argv) == 4:
+            emit(request({"action": "manual", "fan": sys.argv[2], "value": int(sys.argv[3])}))
+        if command == "restore":
+            emit(request({"action": "restore"}))
+        if command == "save" and len(sys.argv) == 4:
+            emit(request({"action": "save", "cpu": int(sys.argv[2]), "case": int(sys.argv[3])}))
+        emit({"ok": False, "error": "Invalid command"}, 2)
+    except Exception as error:
+        emit({"ok": False, "error": str(error)}, 1)
+
+
+if __name__ == "__main__":
+    main()

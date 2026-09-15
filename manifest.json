@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "stevemcqueen.thermals",
+  "name": "Thermals & Fans",
+  "version": "0.2.0",
+  "author": "Steve McQueen",
+  "description": "Direct hwmon CPU, GPU, memory and NVMe telemetry with optional fan controls",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Thermals & Fans",
+    "description": "System temperatures, CPU state and fan controls",
+    "category": "System",
+    "allowMultiple": false
+  }
+}
