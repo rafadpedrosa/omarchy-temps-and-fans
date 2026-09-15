@@ -526,12 +526,15 @@ Panel {
           }
           TextField {
             id: temperatureField
-            Layout.fillWidth: true
+            Layout.preferredWidth: Style.space(64)
+            Layout.minimumWidth: Style.space(64)
+            Layout.maximumWidth: Style.space(64)
             Layout.preferredHeight: Style.space(32)
             Layout.minimumHeight: Style.space(32)
             text: String(point[0])
             color: root.bar.foreground
             placeholderText: "°C"
+            horizontalAlignment: TextInput.AlignHCenter
             enabled: index > 0
             selectByMouse: true
             validator: IntValidator { bottom: index > 0 ? curveEditor.points[index - 1][0] + 1 : 0; top: index + 1 < curveEditor.points.length ? curveEditor.points[index + 1][0] - 1 : 100 }
@@ -543,12 +546,15 @@ Panel {
           Text { text: "°C"; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption }
           TextField {
             id: dutyField
-            Layout.fillWidth: true
+            Layout.preferredWidth: Style.space(64)
+            Layout.minimumWidth: Style.space(64)
+            Layout.maximumWidth: Style.space(64)
             Layout.preferredHeight: Style.space(32)
             Layout.minimumHeight: Style.space(32)
             text: String(point[1])
             color: root.bar.foreground
             placeholderText: "%"
+            horizontalAlignment: TextInput.AlignHCenter
             selectByMouse: true
             validator: IntValidator { bottom: 5; top: 100 }
             onEditingFinished: {
