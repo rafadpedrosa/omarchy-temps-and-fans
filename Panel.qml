@@ -523,7 +523,7 @@ Panel {
             Layout.preferredWidth: Style.space(54)
           }
           RowLayout {
-            spacing: Style.space(2)
+            spacing: Style.space(5)
             TextField {
               id: temperatureField
               Layout.preferredWidth: Style.space(84)
@@ -545,7 +545,7 @@ Panel {
             Text { text: "°C"; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption }
           }
           RowLayout {
-            spacing: Style.space(2)
+            spacing: Style.space(5)
             TextField {
               id: dutyField
               Layout.preferredWidth: Style.space(84)
