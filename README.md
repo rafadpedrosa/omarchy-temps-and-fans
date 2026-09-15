@@ -8,12 +8,12 @@ The widget is useful immediately after installation: read-only telemetry needs n
   <table>
     <tr>
       <td align="center" valign="top">
-        <img src="./assets/thermals-panel.png" alt="Thermals and fan controls" width="380">
-        <br><sub>Fan control and editable profiles</sub>
-      </td>
-      <td align="center" valign="top">
         <img src="./assets/telemetry-panel.png" alt="Detailed hardware telemetry" width="380">
         <br><sub>CPU, GPU, memory, NVMe, and board telemetry</sub>
+      </td>
+      <td align="center" valign="top">
+        <img src="./assets/thermals-panel.png" alt="Thermals and fan controls" width="380">
+        <br><sub>Fan control and editable profiles</sub>
       </td>
     </tr>
   </table>
