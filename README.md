@@ -7,7 +7,7 @@ The widget is useful immediately after installation: read-only telemetry needs n
 ## Install the plugin
 
 ```bash
-omarchy plugin add https://github.com/YOUR_ACCOUNT/omarchy-thermals.git --enable
+omarchy plugin add https://github.com/stevemcqueenz/omarchy-temps-and-fans.git --enable
 omarchy bar move stevemcqueen.thermals --after omarchy.agents
 ```
 
@@ -28,7 +28,13 @@ sudo ./install-service --replace-coolercontrol
 
 The service discovers changing `/sys/class/hwmon/hwmon*` numbers by driver name on every update. Copy and edit `config.example.json` as `/etc/omarchy-thermals/config.json` when the defaults do not match the motherboard. `fans.cpu` and `fans.case` are the numeric portions of `pwmN`/`fanN_input`.
 
-Manual duties range from 5–100% and persist until **Restore optimized** is selected. At 85°C, manual mode is cancelled and the saved CPU-temperature curves take over. If the CPU sensor disappears, both configured fans are forced to 100%.
+Manual duties range from 5–100% and persist until **Restore selected** is selected. At 85°C, manual mode is cancelled and the selected CPU-temperature curves take over. If the CPU sensor disappears, both configured fans are forced to 100%.
+
+## Fan profiles
+
+The panel exposes four editable presets: **Default**, **Full speed**, **Silent**, and **Custom**. The names are labels rather than fixed policies—rename any preset to match your system. Select a profile, adjust the temperature/duty points for the CPU and case fans, and save it. Between points the daemon interpolates a smooth ramp, so you can make a flat quiet base and add gradual or stepped cooling above it. The selected profile is also the one used automatically after the 85°C safety hand-off.
+
+The profile editor is stored in `/var/lib/omarchy-thermals/state.json`, allowing each machine to tune its own curves without changing the plugin. The GPU is monitored (temperatures, load, and any exposed fan RPM/duty), but GPU fan control is intentionally not attempted.
 
 ## Remove
 

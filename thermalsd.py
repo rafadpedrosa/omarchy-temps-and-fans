@@ -68,14 +68,37 @@ class Controller:
         self.lock = threading.RLock()
         self.stop_event = threading.Event()
         self.config = json.loads(config_path.read_text())
+        base_profiles = self.config["profiles"]
+        default_presets = {
+            "default": {
+                "name": "Default",
+                "cpu": [[0, 30], [60, 30], [75, 50], [85, 70], [95, 100]],
+                "case": [[0, 40], [60, 40], [75, 55], [85, 70], [95, 100]],
+            },
+            "full": {
+                "name": "Full speed",
+                "cpu": [[0, 100], [60, 100], [75, 100], [85, 100], [95, 100]],
+                "case": [[0, 100], [60, 100], [75, 100], [85, 100], [95, 100]],
+            },
+            "silent": {"name": "Silent", "cpu": base_profiles["cpu"], "case": base_profiles["case"]},
+            "custom": {"name": "Custom", "cpu": base_profiles["cpu"], "case": base_profiles["case"]},
+        }
         defaults = {
             "modes": {"cpu": "optimized", "case": "optimized"},
             "manual": {"cpu": 25, "case": 40},
-            "profiles": self.config["profiles"],
+            "presets": default_presets,
+            "active_preset": "silent",
         }
         try:
             loaded = json.loads(state_path.read_text())
-            defaults.update({key: loaded[key] for key in defaults if key in loaded})
+            if "presets" in loaded:
+                defaults["presets"] = loaded["presets"]
+            elif "profiles" in loaded:  # migrate the original two-curve state
+                defaults["presets"]["silent"]["cpu"] = loaded["profiles"].get("cpu", base_profiles["cpu"])
+                defaults["presets"]["silent"]["case"] = loaded["profiles"].get("case", base_profiles["case"])
+                defaults["presets"]["custom"]["cpu"] = defaults["presets"]["silent"]["cpu"]
+                defaults["presets"]["custom"]["case"] = defaults["presets"]["silent"]["case"]
+            defaults.update({key: loaded[key] for key in ("modes", "manual", "active_preset") if key in loaded})
         except (OSError, ValueError, TypeError):
             pass
         self.state = defaults
@@ -162,7 +185,8 @@ class Controller:
                     if self.state["modes"].get(role) == "manual":
                         duties[role] = int(self.state["manual"][role])
                     else:
-                        duties[role] = interpolate(self.state["profiles"][role], temperature)
+                        preset = self.state["presets"].get(self.state.get("active_preset", "silent"), self.state["presets"]["silent"])
+                        duties[role] = interpolate(preset[role], temperature)
                 self.last_error = ""
             for role, duty in duties.items():
                 try:
@@ -204,12 +228,55 @@ class Controller:
             elif action == "save":
                 bases = {"cpu": max(5, min(100, int(request["cpu"]))), "case": max(5, min(100, int(request["case"])))}
                 ramps = {"cpu": [[90, 60], [93, 80], [95, 100]], "case": [[90, 65], [93, 82], [95, 100]]}
+                preset = self.state["presets"][self.state.get("active_preset", "silent")]
                 for role, base in bases.items():
-                    self.state["profiles"][role] = [[0, base], [85, base]] + [[temp, max(base, duty)] for temp, duty in ramps[role]]
+                    preset[role] = [[0, base], [85, base]] + [[temp, max(base, duty)] for temp, duty in ramps[role]]
                 self.state["modes"] = {"cpu": "optimized", "case": "optimized"}
                 self.persist()
                 self.control_once()
                 message = "Optimized profile baselines updated and restored"
+            elif action == "select":
+                preset_id = str(request.get("preset", ""))
+                if preset_id not in self.state["presets"]:
+                    raise ValueError("Unknown preset")
+                self.state["active_preset"] = preset_id
+                self.state["modes"] = {"cpu": "optimized", "case": "optimized"}
+                self.persist()
+                self.control_once()
+                message = f"{self.state['presets'][preset_id]['name']} profile applied"
+            elif action == "preset_save":
+                preset_id = str(request.get("preset", ""))
+                if preset_id not in self.state["presets"]:
+                    raise ValueError("Unknown preset")
+                name = str(request.get("name", "")).strip()[:32]
+                if not name:
+                    raise ValueError("Preset name cannot be empty")
+                curves = {}
+                for role in ("cpu", "case"):
+                    points = request.get(role)
+                    if not isinstance(points, list) or len(points) < 2 or len(points) > 8:
+                        raise ValueError(f"{role} curve needs 2–8 points")
+                    normalized = []
+                    previous_temp = -1
+                    for point in points:
+                        if not isinstance(point, list) or len(point) != 2:
+                            raise ValueError("Curve points must be [temperature, duty]")
+                        temperature, duty = int(point[0]), int(point[1])
+                        if temperature < 0 or temperature > 100 or temperature <= previous_temp:
+                            raise ValueError("Curve temperatures must be strictly increasing")
+                        if duty < 5 or duty > 100:
+                            raise ValueError("Curve duties must be between 5% and 100%")
+                        previous_temp = temperature
+                        normalized.append([temperature, duty])
+                    if normalized[0][0] != 0:
+                        raise ValueError("The first curve point must start at 0°C")
+                    curves[role] = normalized
+                self.state["presets"][preset_id] = {"name": name, "cpu": curves["cpu"], "case": curves["case"]}
+                self.state["active_preset"] = preset_id
+                self.state["modes"] = {"cpu": "optimized", "case": "optimized"}
+                self.persist()
+                self.control_once()
+                message = f"{name} profile saved and applied"
             elif action == "status":
                 message = ""
             else:
@@ -221,7 +288,8 @@ class Controller:
                 "cpu_temp": self.last_temp,
                 "cpu_power": self.last_power,
                 "fans": {"cpu": self.fan_info("cpu"), "case": self.fan_info("case")},
-                "profiles": self.state["profiles"],
+                "active_preset": self.state.get("active_preset", "silent"),
+                "presets": self.state["presets"],
                 "error": self.last_error,
             }
 

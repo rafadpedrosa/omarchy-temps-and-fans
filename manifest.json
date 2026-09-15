@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "stevemcqueen.thermals",
   "name": "Thermals & Fans",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Steve McQueen",
   "description": "Direct hwmon CPU, GPU, memory and NVMe telemetry with optional fan controls",
   "kinds": [

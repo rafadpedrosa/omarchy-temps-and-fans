@@ -18,6 +18,11 @@ Panel {
   property bool noticeError: false
   property int cpuPreview: snapshot.ok ? snapshot.fans.cpu.duty : 25
   property int casePreview: snapshot.ok ? snapshot.fans.case.duty : 40
+  property string selectedPreset: snapshot.ok && snapshot.active_preset ? snapshot.active_preset : "silent"
+  property string presetName: "Silent"
+  property var editCurves: ({ cpu: [], case: [] })
+  property bool editingDirty: false
+  readonly property var presetIds: ["default", "full", "silent", "custom"]
   property string focusSection: "cpuFan"
   property bool cursorActive: false
   readonly property string helperPath: decodeURIComponent(Qt.resolvedUrl("thermalsctl").toString().replace("file://", ""))
@@ -30,6 +35,28 @@ Panel {
   function refresh() {
     if (!statusProc.running) statusProc.running = true
   }
+  function preset(id) { return snapshot.presets && snapshot.presets[id] ? snapshot.presets[id] : ({ name: id, cpu: [], case: [] }) }
+  function syncPresetEditor() {
+    var selected = preset(selectedPreset)
+    presetName = selected.name || selectedPreset
+    editCurves = { cpu: JSON.parse(JSON.stringify(selected.cpu || [])), case: JSON.parse(JSON.stringify(selected.case || [])) }
+  }
+  function selectPreset(id) {
+    selectedPreset = id
+    editingDirty = false
+    syncPresetEditor()
+    runAction(["select", id])
+  }
+  function changeCurvePoint(role, index, temperature, duty) {
+    var next = { cpu: JSON.parse(JSON.stringify(editCurves.cpu || [])), case: JSON.parse(JSON.stringify(editCurves.case || [])) }
+    next[role][index] = [Math.round(temperature), Math.round(duty)]
+    editCurves = next
+    editingDirty = true
+  }
+  function savePreset() {
+    runAction(["preset-save", selectedPreset, presetName, JSON.stringify(editCurves.cpu), JSON.stringify(editCurves.case)])
+    editingDirty = false
+  }
   function runAction(args) {
     if (actionProc.running) return
     notice = ""
@@ -38,7 +65,7 @@ Panel {
     actionProc.running = true
   }
   function moveCursor(dy) {
-    var sections = ["cpuFan", "caseFan", "restore", "save"]
+    var sections = ["cpuFan", "caseFan", "restore"]
     var index = Math.max(0, sections.indexOf(focusSection))
     focusSection = sections[Math.max(0, Math.min(sections.length - 1, index + (dy > 0 ? 1 : -1)))]
   }
@@ -52,8 +79,7 @@ Panel {
     }
   }
   function activateCurrent() {
-    if (focusSection === "restore") runAction(["restore"])
-    else if (focusSection === "save") runAction(["save", String(cpuPreview), String(casePreview)])
+    if (focusSection === "restore") selectPreset(selectedPreset)
   }
 
   onOpenedChanged: {
@@ -86,6 +112,7 @@ Panel {
           if (data.ok) {
             var wasDragging = cpuFanRow.dragging || caseFanRow.dragging
             root.snapshot = data
+            if (!root.editingDirty) root.syncPresetEditor()
             if (!wasDragging && !root.busy) {
               root.cpuPreview = data.fans.cpu.duty
               root.casePreview = data.fans.case.duty
@@ -190,7 +217,7 @@ Panel {
           PanelHero {
             title: "Thermals & Fans"
             meta: root.snapshot.ok
-              ? (root.snapshot.backend !== "direct" ? "Telemetry only · install control service" : (root.manualMode ? "Manual · held until restored" : "Optimized · direct hwmon"))
+              ? (root.snapshot.backend !== "direct" ? "Telemetry only · install control service" : (root.manualMode ? "Manual · held until restored" : (root.preset(root.selectedPreset).name || "Profile") + " · direct hwmon"))
               : "Reading hardware sensors"
             detail: root.c(root.cpuTemp)
             foreground: root.bar.foreground
@@ -202,6 +229,62 @@ Panel {
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.display
               }
+            }
+          }
+
+          PanelSeparator { foreground: root.bar.foreground }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(8)
+            PanelSectionHeader { text: "FAN PROFILES"; foreground: root.bar.foreground; fontFamily: root.bar.fontFamily }
+            Flow {
+              width: parent.width
+              spacing: Style.space(6)
+              Repeater {
+                model: root.presetIds
+                Button {
+                  required property string modelData
+                  text: root.preset(modelData).name
+                  selected: root.selectedPreset === modelData
+                  bordered: true
+                  foreground: root.bar.foreground
+                  fontFamily: root.bar.fontFamily
+                  onClicked: root.selectPreset(modelData)
+                }
+              }
+            }
+            RowLayout {
+              width: parent.width
+              spacing: Style.space(8)
+              TextField {
+                id: presetNameField
+                Layout.fillWidth: true
+                text: root.presetName
+                color: root.bar.foreground
+                placeholderText: "Preset name"
+                selectByMouse: true
+                onTextChanged: root.presetName = text
+              }
+              Button {
+                text: "Save profile"
+                iconText: "󰆓"
+                bordered: true
+                enabled: root.snapshot.ok && root.snapshot.backend === "direct" && !root.busy && root.presetName.trim() !== ""
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                onClicked: root.savePreset()
+              }
+            }
+            CurveEditor { role: "cpu"; title: "CPU curve"; points: root.editCurves.cpu }
+            CurveEditor { role: "case"; title: "Case curve"; points: root.editCurves.case }
+            Text {
+              width: parent.width
+              text: "Each curve is interpolated between points. Keep the first point at 0°C; later temperatures must increase."
+              color: Qt.darker(root.bar.foreground, 1.5)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.Wrap
             }
           }
 
@@ -301,7 +384,7 @@ Panel {
               spacing: Style.space(8)
               Button {
                 Layout.fillWidth: true
-                text: "Restore optimized"
+                text: "Restore selected"
                 iconText: "󰑐"
                 bordered: true
                 enabled: root.snapshot.ok && root.snapshot.backend === "direct" && !root.busy
@@ -309,20 +392,7 @@ Panel {
                 foreground: root.bar.foreground
                 fontFamily: root.bar.fontFamily
                 onHovered: function(on) { if (on) { root.cursorActive = true; root.focusSection = "restore" } }
-                onClicked: root.runAction(["restore"])
-              }
-              Button {
-                Layout.fillWidth: true
-                text: "Save as optimized"
-                iconText: "󰆓"
-                bordered: true
-                enabled: root.snapshot.ok && root.snapshot.backend === "direct" && !root.busy
-                hasCursor: root.cursorActive && root.focusSection === "save"
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                tooltipText: "Use these duties as the flat 0–85°C baselines"
-                onHovered: function(on) { if (on) { root.cursorActive = true; root.focusSection = "save" } }
-                onClicked: root.runAction(["save", String(root.cpuPreview), String(root.casePreview)])
+                onClicked: root.selectPreset(root.selectedPreset)
               }
             }
 
@@ -338,7 +408,7 @@ Panel {
 
             Text {
               width: parent.width
-              text: "Manual settings stay active until you restore the optimized profile. At 85°C they restore automatically for safety. Saved baselines stay flat through 85°C."
+              text: "Manual settings stay active until you restore a profile. At 85°C the selected profile takes over automatically for safety."
               color: Qt.darker(root.bar.foreground, 1.5)
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.caption
@@ -401,6 +471,56 @@ Panel {
         onReleased: function(value) { fanControl.committed(Math.round(value / 5) * 5) }
       }
       HoverHandler { onHoveredChanged: if (hovered) fanControl.hovered() }
+    }
+  }
+
+  component CurveEditor: Column {
+    id: curveEditor
+    property string role: "cpu"
+    property string title: "Curve"
+    property var points: []
+    width: parent ? parent.width : 0
+    spacing: Style.space(5)
+    Text { text: curveEditor.title; color: root.bar.foreground; font.family: root.bar.fontFamily; font.pixelSize: Style.font.body; font.bold: true }
+    Repeater {
+      model: curveEditor.points.length
+      Column {
+        required property int index
+        property var point: curveEditor.points[index]
+        width: curveEditor.width
+        spacing: Style.space(2)
+        Text {
+          text: "Point " + (index + 1) + "  ·  " + point[0] + "°C  →  " + point[1] + "%"
+          color: Qt.darker(root.bar.foreground, 1.25)
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: true
+        }
+        PanelSlider {
+          id: dutySlider
+          bar: root.bar
+          width: parent.width
+          minimum: 5
+          maximum: 100
+          step: 5
+          integer: true
+          value: point[1]
+          tickCount: 5
+          onReleased: root.changeCurvePoint(curveEditor.role, index, point[0], Math.round(liveValue / 5) * 5)
+        }
+        PanelSlider {
+          id: tempSlider
+          visible: index > 0
+          bar: root.bar
+          width: parent.width
+          minimum: index > 0 ? curveEditor.points[index - 1][0] + 1 : 0
+          maximum: index + 1 < curveEditor.points.length ? curveEditor.points[index + 1][0] - 1 : 100
+          step: 1
+          integer: true
+          value: point[0]
+          onReleased: root.changeCurvePoint(curveEditor.role, index, Math.round(liveValue), point[1])
+        }
+      }
     }
   }
 }

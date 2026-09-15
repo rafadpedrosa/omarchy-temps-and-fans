@@ -177,6 +177,8 @@ def collect() -> dict:
         "ok": True,
         "backend": backend.get("backend", "unavailable"),
         "backend_error": backend.get("error", ""),
+        "active_preset": backend.get("active_preset", "silent"),
+        "presets": backend.get("presets", {}),
         "cpu": {"temp": cpu_temp, "load": cpu_load(), "power": power, "freq_avg": avg, "freq_min": minimum, "freq_max": maximum},
         "gpu": {"temp": gpus[0]["temp"], "load": gpus[0]["load"]} if gpus else {"temp": None, "load": None},
         "gpus": gpus,
@@ -201,6 +203,10 @@ def main() -> None:
             emit(request({"action": "manual", "fan": sys.argv[2], "value": int(sys.argv[3])}))
         if command == "restore":
             emit(request({"action": "restore"}))
+        if command == "select" and len(sys.argv) == 3:
+            emit(request({"action": "select", "preset": sys.argv[2]}))
+        if command == "preset-save" and len(sys.argv) == 6:
+            emit(request({"action": "preset_save", "preset": sys.argv[2], "name": sys.argv[3], "cpu": json.loads(sys.argv[4]), "case": json.loads(sys.argv[5])}))
         if command == "save" and len(sys.argv) == 4:
             emit(request({"action": "save", "cpu": int(sys.argv[2]), "case": int(sys.argv[3])}))
         emit({"ok": False, "error": "Invalid command"}, 2)
