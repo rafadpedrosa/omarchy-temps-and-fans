@@ -22,6 +22,7 @@ Panel {
   property string presetName: "Silent"
   property var editCurves: ({ cpu: [], case: [] })
   property bool editingDirty: false
+  property bool curveEditorOpen: false
   readonly property var presetIds: ["default", "full", "silent", "custom"]
   property string focusSection: "cpuFan"
   property bool cursorActive: false
@@ -234,60 +235,6 @@ Panel {
 
           PanelSeparator { foreground: root.bar.foreground }
 
-          Column {
-            width: parent.width
-            spacing: Style.space(8)
-            PanelSectionHeader { text: "FAN PROFILES"; foreground: root.bar.foreground; fontFamily: root.bar.fontFamily }
-            Flow {
-              width: parent.width
-              spacing: Style.space(6)
-              Repeater {
-                model: root.presetIds
-                Button {
-                  required property string modelData
-                  text: root.preset(modelData).name
-                  selected: root.selectedPreset === modelData
-                  bordered: true
-                  foreground: root.bar.foreground
-                  fontFamily: root.bar.fontFamily
-                  onClicked: root.selectPreset(modelData)
-                }
-              }
-            }
-            RowLayout {
-              width: parent.width
-              spacing: Style.space(8)
-              TextField {
-                id: presetNameField
-                Layout.fillWidth: true
-                text: root.presetName
-                color: root.bar.foreground
-                placeholderText: "Preset name"
-                selectByMouse: true
-                onTextChanged: root.presetName = text
-              }
-              Button {
-                text: "Save profile"
-                iconText: "󰆓"
-                bordered: true
-                enabled: root.snapshot.ok && root.snapshot.backend === "direct" && !root.busy && root.presetName.trim() !== ""
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                onClicked: root.savePreset()
-              }
-            }
-            CurveEditor { role: "cpu"; title: "CPU curve"; points: root.editCurves.cpu }
-            CurveEditor { role: "case"; title: "Case curve"; points: root.editCurves.case }
-            Text {
-              width: parent.width
-              text: "Each curve is interpolated between points. Keep the first point at 0°C; later temperatures must increase."
-              color: Qt.darker(root.bar.foreground, 1.5)
-              font.family: root.bar.fontFamily
-              font.pixelSize: Style.font.caption
-              wrapMode: Text.Wrap
-            }
-          }
-
           PanelSeparator { foreground: root.bar.foreground }
 
           Column {
@@ -377,6 +324,72 @@ Panel {
               onHovered: function() { root.cursorActive = true; root.focusSection = "caseFan" }
               onPreviewChanged: function(value) { root.casePreview = value }
               onCommitted: function(value) { root.casePreview = value; root.runAction(["manual", "case", String(value)]) }
+            }
+
+            PanelSectionHeader { text: "PROFILE"; foreground: root.bar.foreground; fontFamily: root.bar.fontFamily }
+            Flow {
+              width: parent.width
+              spacing: Style.space(6)
+              Repeater {
+                model: root.presetIds
+                Button {
+                  required property string modelData
+                  text: root.preset(modelData).name
+                  selected: root.selectedPreset === modelData
+                  bordered: true
+                  foreground: root.bar.foreground
+                  fontFamily: root.bar.fontFamily
+                  onClicked: root.selectPreset(modelData)
+                }
+              }
+            }
+
+            Button {
+              width: parent.width
+              text: root.curveEditorOpen ? "Hide curve editor" : "Edit fan curves"
+              iconText: root.curveEditorOpen ? "󰍉" : "󰏫"
+              bordered: true
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              onClicked: root.curveEditorOpen = !root.curveEditorOpen
+            }
+
+            Column {
+              width: parent.width
+              spacing: Style.space(6)
+              visible: root.curveEditorOpen
+              RowLayout {
+                width: parent.width
+                spacing: Style.space(8)
+                TextField {
+                  id: presetNameField
+                  Layout.fillWidth: true
+                  text: root.presetName
+                  color: root.bar.foreground
+                  placeholderText: "Preset name"
+                  selectByMouse: true
+                  onTextChanged: root.presetName = text
+                }
+                Button {
+                  text: "Save profile"
+                  iconText: "󰆓"
+                  bordered: true
+                  enabled: root.snapshot.ok && root.snapshot.backend === "direct" && !root.busy && root.presetName.trim() !== ""
+                  foreground: root.bar.foreground
+                  fontFamily: root.bar.fontFamily
+                  onClicked: root.savePreset()
+                }
+              }
+              CurveEditor { role: "cpu"; title: "CPU curve"; points: root.editCurves.cpu }
+              CurveEditor { role: "case"; title: "Case curve"; points: root.editCurves.case }
+              Text {
+                width: parent.width
+                text: "Each curve is interpolated between points. Keep the first point at 0°C; later temperatures must increase."
+                color: Qt.darker(root.bar.foreground, 1.5)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.Wrap
+              }
             }
 
             RowLayout {
