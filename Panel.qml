@@ -54,6 +54,17 @@ Panel {
     editCurves = next
     editingDirty = true
   }
+  function addCurvePoint(role) {
+    var next = { cpu: JSON.parse(JSON.stringify(editCurves.cpu || [])), case: JSON.parse(JSON.stringify(editCurves.case || [])) }
+    var points = next[role]
+    if (points.length >= 8) return
+    var previous = points.length ? points[points.length - 1] : [0, 25]
+    var temperature = Math.min(100, Number(previous[0]) + 5)
+    if (temperature <= Number(previous[0])) return
+    points.push([temperature, Number(previous[1])])
+    editCurves = next
+    editingDirty = true
+  }
   function savePreset() {
     runAction(["preset-save", selectedPreset, presetName, JSON.stringify(editCurves.cpu), JSON.stringify(editCurves.case)])
     editingDirty = false
@@ -503,6 +514,7 @@ Panel {
         spacing: Style.space(2)
         RowLayout {
           width: parent.width
+          height: Style.space(32)
           spacing: Style.space(6)
           Text {
             text: "Point " + (index + 1)
@@ -515,6 +527,8 @@ Panel {
           TextField {
             id: temperatureField
             Layout.fillWidth: true
+            Layout.preferredHeight: Style.space(32)
+            Layout.minimumHeight: Style.space(32)
             text: String(point[0])
             color: root.bar.foreground
             placeholderText: "°C"
@@ -530,6 +544,8 @@ Panel {
           TextField {
             id: dutyField
             Layout.fillWidth: true
+            Layout.preferredHeight: Style.space(32)
+            Layout.minimumHeight: Style.space(32)
             text: String(point[1])
             color: root.bar.foreground
             placeholderText: "%"
@@ -543,6 +559,15 @@ Panel {
           Text { text: "%"; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption }
         }
       }
+    }
+    Button {
+      width: curveEditor.width
+      text: "Add point"
+      bordered: true
+      enabled: curveEditor.points.length < 8 && curveEditor.points.length > 0 && curveEditor.points[curveEditor.points.length - 1][0] < 100
+      foreground: root.bar.foreground
+      fontFamily: root.bar.fontFamily
+      onClicked: root.addCurvePoint(curveEditor.role)
     }
   }
 }
