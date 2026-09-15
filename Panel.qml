@@ -515,7 +515,7 @@ Panel {
         RowLayout {
           width: parent.width
           height: Style.space(32)
-          spacing: Style.space(6)
+          spacing: Style.space(3)
           Text {
             text: "Point " + (index + 1)
             color: root.bar.foreground
@@ -526,9 +526,9 @@ Panel {
           }
           TextField {
             id: temperatureField
-            Layout.preferredWidth: Style.space(64)
-            Layout.minimumWidth: Style.space(64)
-            Layout.maximumWidth: Style.space(64)
+            Layout.preferredWidth: Style.space(72)
+            Layout.minimumWidth: Style.space(72)
+            Layout.maximumWidth: Style.space(72)
             Layout.preferredHeight: Style.space(32)
             Layout.minimumHeight: Style.space(32)
             text: String(point[0])
@@ -546,9 +546,9 @@ Panel {
           Text { text: "°C"; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption }
           TextField {
             id: dutyField
-            Layout.preferredWidth: Style.space(64)
-            Layout.minimumWidth: Style.space(64)
-            Layout.maximumWidth: Style.space(64)
+            Layout.preferredWidth: Style.space(72)
+            Layout.minimumWidth: Style.space(72)
+            Layout.maximumWidth: Style.space(72)
             Layout.preferredHeight: Style.space(32)
             Layout.minimumHeight: Style.space(32)
             text: String(point[1])
