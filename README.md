@@ -69,4 +69,14 @@ The removal script deliberately retains `/etc/omarchy-thermals/config.json` and 
 - Storage: NVMe hwmon
 - Fan control: motherboard hwmon drivers exposing writable `pwmN` and `pwmN_enable`
 
-The kernel hardware driver remains a prerequisite. This plugin does not install out-of-tree motherboard drivers automatically.
+### If no fans are detected
+
+The kernel hardware driver remains a prerequisite. If the panel shows telemetry but no controllable fans, users can install the appropriate motherboard hwmon driver themselves or ask their local coding/system agent to help:
+
+1. Identify the motherboard and fan-controller chip (`lspci`, `sensors-detect`, and `/sys/class/hwmon`).
+2. Install the matching in-tree package/module or, where necessary, a reviewed DKMS driver.
+3. Load the module and confirm that `/sys/class/hwmon` exposes `fanN_input`, `pwmN`, and `pwmN_enable`.
+4. Set the controller driver and fan channel numbers in `/etc/omarchy-thermals/config.json` using `config.example.json`.
+5. Restart `omarchy-thermals.service` and test the readings before enabling curves.
+
+Because drivers and DKMS modules run with kernel privileges, the plugin does not install them automatically. An agent can perform the hardware identification and prepare the exact commands, but users should review and approve any driver installation before it runs.
