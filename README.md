@@ -23,13 +23,13 @@ The widget is useful immediately after installation: read-only telemetry needs n
 
 ```bash
 omarchy plugin add https://github.com/stevemcqueenz/omarchy-temps-and-fans.git --enable
-omarchy bar move stevemcqueen.thermals --after omarchy.agents
+omarchy bar move thermals.fans --after omarchy.agents
 ```
 
 Omarchy deliberately does not execute plugin install hooks or privileged commands. Review the companion service, then install it explicitly if fan control is wanted:
 
 ```bash
-cd ~/.config/omarchy/plugins/stevemcqueen.thermals
+cd ~/.config/omarchy/plugins/thermals.fans
 sudo ./install-service
 ```
 
@@ -54,9 +54,9 @@ The profile editor is stored in `/var/lib/omarchy-thermals/state.json`, allowing
 ## Remove
 
 ```bash
-cd ~/.config/omarchy/plugins/stevemcqueen.thermals
+cd ~/.config/omarchy/plugins/thermals.fans
 sudo ./uninstall-service
-omarchy plugin remove stevemcqueen.thermals --yes
+omarchy plugin remove thermals.fans --yes
 ```
 
 The removal script deliberately retains `/etc/omarchy-thermals/config.json` and `/var/lib/omarchy-thermals/state.json` so local tuning is not destroyed accidentally.

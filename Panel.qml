@@ -8,8 +8,8 @@ import qs.Commons
 
 Panel {
   id: root
-  moduleName: "stevemcqueen.thermals"
-  ipcTarget: "stevemcqueen.thermals"
+  moduleName: "thermals.fans"
+  ipcTarget: "thermals.fans"
   manageIpc: false
 
   property var snapshot: ({ ok: false })
@@ -151,7 +151,7 @@ Panel {
   Component.onCompleted: root.refresh()
 
   IpcHandler {
-    target: "stevemcqueen.thermals"
+    target: "thermals.fans"
     function toggle(): void { root.toggle() }
     function refresh(): void { root.refresh() }
     function state(): string { return JSON.stringify(root.snapshot) }
