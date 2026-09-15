@@ -4,6 +4,10 @@ An Omarchy bar widget for direct Linux `hwmon` telemetry and optional CPU-temper
 
 The widget is useful immediately after installation: read-only telemetry needs no daemon, account, network access, or elevated privileges. Fan controls become available when the small companion service is installed.
 
+![Thermals and fan controls](./assets/thermals-panel.png)
+
+![Detailed hardware telemetry](./assets/telemetry-panel.png)
+
 ## Install the plugin
 
 ```bash
