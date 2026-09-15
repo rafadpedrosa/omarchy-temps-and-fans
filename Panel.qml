@@ -347,7 +347,6 @@ Panel {
             Button {
               width: parent.width
               text: root.curveEditorOpen ? "Hide curve editor" : "Edit fan curves"
-              iconText: root.curveEditorOpen ? "󰍉" : "󰏫"
               bordered: true
               foreground: root.bar.foreground
               fontFamily: root.bar.fontFamily
@@ -502,36 +501,46 @@ Panel {
         property var point: curveEditor.points[index]
         width: curveEditor.width
         spacing: Style.space(2)
-        Text {
-          text: "Point " + (index + 1) + "  ·  " + point[0] + "°C  →  " + point[1] + "%"
-          color: Qt.darker(root.bar.foreground, 1.25)
-          font.family: root.bar.fontFamily
-          font.pixelSize: Style.font.caption
-          font.bold: true
-        }
-        PanelSlider {
-          id: dutySlider
-          bar: root.bar
+        RowLayout {
           width: parent.width
-          minimum: 5
-          maximum: 100
-          step: 5
-          integer: true
-          value: point[1]
-          tickCount: 5
-          onReleased: root.changeCurvePoint(curveEditor.role, index, point[0], Math.round(liveValue / 5) * 5)
-        }
-        PanelSlider {
-          id: tempSlider
-          visible: index > 0
-          bar: root.bar
-          width: parent.width
-          minimum: index > 0 ? curveEditor.points[index - 1][0] + 1 : 0
-          maximum: index + 1 < curveEditor.points.length ? curveEditor.points[index + 1][0] - 1 : 100
-          step: 1
-          integer: true
-          value: point[0]
-          onReleased: root.changeCurvePoint(curveEditor.role, index, Math.round(liveValue), point[1])
+          spacing: Style.space(6)
+          Text {
+            text: "Point " + (index + 1)
+            color: root.bar.foreground
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            Layout.preferredWidth: Style.space(54)
+          }
+          TextField {
+            id: temperatureField
+            Layout.fillWidth: true
+            text: String(point[0])
+            color: root.bar.foreground
+            placeholderText: "°C"
+            enabled: index > 0
+            selectByMouse: true
+            validator: IntValidator { bottom: index > 0 ? curveEditor.points[index - 1][0] + 1 : 0; top: index + 1 < curveEditor.points.length ? curveEditor.points[index + 1][0] - 1 : 100 }
+            onEditingFinished: {
+              var value = Number(text)
+              if (!isNaN(value)) root.changeCurvePoint(curveEditor.role, index, value, point[1])
+            }
+          }
+          Text { text: "°C"; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption }
+          TextField {
+            id: dutyField
+            Layout.fillWidth: true
+            text: String(point[1])
+            color: root.bar.foreground
+            placeholderText: "%"
+            selectByMouse: true
+            validator: IntValidator { bottom: 5; top: 100 }
+            onEditingFinished: {
+              var value = Number(text)
+              if (!isNaN(value)) root.changeCurvePoint(curveEditor.role, index, point[0], value)
+            }
+          }
+          Text { text: "%"; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption }
         }
       }
     }
