@@ -204,16 +204,17 @@ class Controller:
         # to effective duty 20% + 10*n (0-200 scale): 30/40/50/60/70%, boost=100%.
         # Arbitrary PWM/curve writes do not stick: trigger value 4 turns boost on.
         level = min(5, max(1, round((duty - 20) / 10)))
+        # effective duty on the EC's 0-200 scale: 20% + 10*n (30..70%)
         target = 128 + level
         current = self.read_ecram(EC_MAFAN_CONTROL)
         if current == target:
-            return level * 10
+            return 20 + 10 * level
         if current != EC_NORMAL:
             # The EC ignores level writes while another mode (e.g. boost) is
             # active; pass through Normal first so the level byte sticks.
             self.write_ecram(EC_MAFAN_CONTROL, EC_NORMAL)
         self.write_ecram(EC_MAFAN_CONTROL, target)
-        return level * 10
+        return 20 + 10 * level
 
     def restore_auto(self) -> None:
         if self.read_ecram(EC_MAFAN_CONTROL) != EC_NORMAL:
