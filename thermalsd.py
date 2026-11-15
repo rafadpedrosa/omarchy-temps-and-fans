@@ -256,8 +256,11 @@ class Controller:
             speed = self.read_ecram(EC_FAN_SPEED)
         except (OSError, ValueError):
             speed = None
+        duty = self.last_duties.get("cpu")
+        if duty is None and speed is not None:
+            duty = round(speed / 2)  # auto mode: show the EC's effective duty (0-200 scale)
         return {
-            "duty": self.last_duties.get("cpu"),
+            "duty": duty,
             "rpm": None if speed is None else round(speed),
             "mode": self.state["modes"].get(role, "unavailable"),
         }

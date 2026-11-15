@@ -16,8 +16,8 @@ Panel {
   property bool busy: false
   property string notice: ""
   property bool noticeError: false
-  property int cpuPreview: snapshot.ok ? snapshot.fans.cpu.duty : 25
-  property int casePreview: snapshot.ok ? snapshot.fans.case.duty : 40
+  property int cpuPreview: snapshot.ok ? (snapshot.fans.cpu.duty ?? 25) : 25
+  property int casePreview: snapshot.ok ? (snapshot.fans.case.duty ?? 25) : 25
   property string selectedPreset: snapshot.ok && snapshot.active_preset ? snapshot.active_preset : "silent"
   property string presetName: "Silent"
   property var editCurves: ({ cpu: [], case: [] })
