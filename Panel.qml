@@ -24,7 +24,7 @@ Panel {
   property bool editingDirty: false
   property bool curveEditorOpen: false
   readonly property var presetIds: ["default", "full", "silent", "custom"]
-  property string focusSection: "cpuFan"
+  property string focusSection: "fan"
   property bool cursorActive: false
   readonly property string helperPath: decodeURIComponent(Qt.resolvedUrl("thermalsctl").toString().replace("file://", ""))
   readonly property real cpuTemp: snapshot.ok && snapshot.cpu.temp !== null ? snapshot.cpu.temp : -1
@@ -66,7 +66,7 @@ Panel {
     editingDirty = true
   }
   function savePreset() {
-    runAction(["preset-save", selectedPreset, presetName, JSON.stringify(editCurves.cpu), JSON.stringify(editCurves.case)])
+    runAction(["preset-save", selectedPreset, presetName, JSON.stringify(editCurves.cpu), JSON.stringify(editCurves.cpu)])
     editingDirty = false
   }
   function runAction(args) {
@@ -77,17 +77,14 @@ Panel {
     actionProc.running = true
   }
   function moveCursor(dy) {
-    var sections = ["cpuFan", "caseFan", "restore"]
+    var sections = ["fan", "restore"]
     var index = Math.max(0, sections.indexOf(focusSection))
     focusSection = sections[Math.max(0, Math.min(sections.length - 1, index + (dy > 0 ? 1 : -1)))]
   }
   function adjustCurrent(dx) {
-    if (focusSection === "cpuFan") {
+    if (focusSection === "fan") {
       cpuPreview = Math.max(5, Math.min(100, cpuPreview + dx * 5))
       runAction(["manual", "cpu", String(cpuPreview)])
-    } else if (focusSection === "caseFan") {
-      casePreview = Math.max(5, Math.min(100, casePreview + dx * 5))
-      runAction(["manual", "case", String(casePreview)])
     }
   }
   function activateCurrent() {
@@ -98,7 +95,7 @@ Panel {
     if (opened) {
       refresh()
       cursorActive = false
-      focusSection = "cpuFan"
+      focusSection = "fan"
     }
   }
 
@@ -122,7 +119,7 @@ Panel {
         try {
           var data = JSON.parse(String(text || "{}"))
           if (data.ok) {
-            var wasDragging = cpuFanRow.dragging || caseFanRow.dragging
+            var wasDragging = cpuFanRow.dragging
             root.snapshot = data
             if (!root.editingDirty) root.syncPresetEditor()
             if (!wasDragging && !root.busy) {
@@ -229,7 +226,7 @@ Panel {
           PanelHero {
             title: "Thermals & Fans"
             meta: root.snapshot.ok
-              ? (root.snapshot.backend !== "direct" ? "Telemetry only · install control service" : (root.manualMode ? "Manual · held until restored" : (root.preset(root.selectedPreset).name || "Profile") + " · direct hwmon"))
+              ? (root.snapshot.backend !== "direct" ? "Telemetry only · install control service" : (root.manualMode ? "Manual · held until restored" : (root.preset(root.selectedPreset).name || "Profile") + " · direct EC"))
               : "Reading hardware sensors"
             detail: root.c(root.cpuTemp)
             foreground: root.bar.foreground
@@ -313,26 +310,14 @@ Panel {
 
             FanSlider {
               id: cpuFanRow
-              title: "CPU fan"
+              title: "Fan"
               duty: root.cpuPreview
               rpm: root.snapshot.ok ? root.snapshot.fans.cpu.rpm : 0
               minimum: 5
-              hasCursor: root.cursorActive && root.focusSection === "cpuFan"
-              onHovered: function() { root.cursorActive = true; root.focusSection = "cpuFan" }
+              hasCursor: root.cursorActive && root.focusSection === "fan"
+              onHovered: function() { root.cursorActive = true; root.focusSection = "fan" }
               onPreviewChanged: function(value) { root.cpuPreview = value }
               onCommitted: function(value) { root.cpuPreview = value; root.runAction(["manual", "cpu", String(value)]) }
-            }
-
-            FanSlider {
-              id: caseFanRow
-              title: "Case fan"
-              duty: root.casePreview
-              rpm: root.snapshot.ok ? root.snapshot.fans.case.rpm : 0
-              minimum: 5
-              hasCursor: root.cursorActive && root.focusSection === "caseFan"
-              onHovered: function() { root.cursorActive = true; root.focusSection = "caseFan" }
-              onPreviewChanged: function(value) { root.casePreview = value }
-              onCommitted: function(value) { root.casePreview = value; root.runAction(["manual", "case", String(value)]) }
             }
 
             PanelSectionHeader { text: "PROFILE"; foreground: root.bar.foreground; fontFamily: root.bar.fontFamily }
@@ -388,8 +373,7 @@ Panel {
                   onClicked: root.savePreset()
                 }
               }
-              CurveEditor { role: "cpu"; title: "CPU curve"; points: root.editCurves.cpu }
-              CurveEditor { role: "case"; title: "Case curve"; points: root.editCurves.case }
+              CurveEditor { role: "cpu"; title: "Fan curve"; points: root.editCurves.cpu }
               Text {
                 width: parent.width
                 text: "Each curve is interpolated between points. Keep the first point at 0°C; later temperatures must increase."

@@ -171,7 +171,7 @@ def collect() -> dict:
                     readable.append({"duty": None if pwm is None else round(pwm * 100 / 255), "rpm": round(rpm), "mode": "unavailable"})
         fans = {
             "cpu": readable[0] if readable else {"duty": 0, "rpm": 0, "mode": "unavailable"},
-            "case": readable[1] if len(readable) > 1 else {"duty": 0, "rpm": 0, "mode": "unavailable"},
+            "case": readable[0] if readable else {"duty": 0, "rpm": 0, "mode": "unavailable"},
         }
     return {
         "ok": True,

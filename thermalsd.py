@@ -90,17 +90,17 @@ class Controller:
         base_profiles = self.config["profiles"]
         default_presets = {
             "default": {
-                "name": "Default",
+                "name": "Auto (EC)",
                 "cpu": [[0, 30], [60, 30], [75, 50], [85, 70], [95, 100]],
-                "case": [[0, 40], [60, 40], [75, 55], [85, 70], [95, 100]],
+                "case": [[0, 30], [60, 30], [75, 50], [85, 70], [95, 100]],
             },
             "full": {
-                "name": "Full speed",
+                "name": "Full boost",
                 "cpu": [[0, 100], [60, 100], [75, 100], [85, 100], [95, 100]],
                 "case": [[0, 100], [60, 100], [75, 100], [85, 100], [95, 100]],
             },
             "silent": {"name": "Silent", "cpu": base_profiles["cpu"], "case": base_profiles["case"]},
-            "custom": {"name": "Custom", "cpu": base_profiles["cpu"], "case": base_profiles["case"]},
+            "custom": {"name": "Custom curve", "cpu": base_profiles["cpu"], "case": base_profiles["case"]},
         }
         defaults = {
             "modes": {"cpu": "optimized", "case": "optimized"},
@@ -194,7 +194,10 @@ class Controller:
         Controller._wmi_call((value << 16) + address)
 
     def apply_duty(self, role: str, duty: int) -> None:
-        del role  # both fans are driven by the same EC control byte
+        # Single-fan notebook: both roles share the same EC control byte, so only
+        # one write is ever issued per control cycle (role "cpu").
+        if role != "cpu":
+            return
         duty = max(0, min(100, int(duty)))
         if duty >= 90:
             # Safety hand-off: near 100% duty, use the EC's native boost instead.
@@ -233,12 +236,20 @@ class Controller:
                         preset = self.state["presets"].get(self.state.get("active_preset", "silent"), self.state["presets"]["silent"])
                         duties[role] = interpolate(preset[role], temperature)
                 self.last_error = ""
-            for role, duty in duties.items():
-                try:
-                    self.apply_duty(role, duty)
-                    self.last_duties[role] = duty
-                except (OSError, RuntimeError) as error:
-                    self.last_error = str(error)
+            # Single EC channel: drive it once per cycle, and let the EC's own
+            # intelligent mode run when the Auto profile is selected.
+            with_mode = self.state["modes"].get("cpu", "optimized")
+            preset_id = self.state.get("active_preset", "silent")
+            if with_mode == "optimized" and preset_id == "default" and temperature is not None and temperature < 85:
+                self.restore_auto()
+                self.last_duties = {"cpu": None, "case": None}
+                return
+            duty = duties.get("cpu", 100)
+            try:
+                self.apply_duty("cpu", duty)
+                self.last_duties = {"cpu": duty, "case": duty}
+            except (OSError, ValueError, RuntimeError) as error:
+                self.last_error = str(error)
 
     def fan_info(self, role: str) -> dict:
         try:
@@ -246,7 +257,7 @@ class Controller:
         except (OSError, ValueError):
             speed = None
         return {
-            "duty": self.last_duties.get(role),
+            "duty": self.last_duties.get("cpu"),
             "rpm": None if speed is None else round(speed),
             "mode": self.state["modes"].get(role, "unavailable"),
         }
