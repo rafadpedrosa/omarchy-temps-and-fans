@@ -197,17 +197,27 @@ class Controller:
         duty = max(0, min(100, int(duty)))
         if duty >= 90:
             # Near 100% duty, use the EC's native boost instead of the levels.
-            self.write_ecram(EC_MAFAN_CONTROL, EC_BOOST)
+            if self.read_ecram(EC_MAFAN_CONTROL) != EC_BOOST:
+                self.write_ecram(EC_MAFAN_CONTROL, EC_BOOST)
             return 100
         # The EC only honors its 5 fixed fan levels here (duty 60/70/80/90/100 on
         # the 0-200 scale). Writing the PWM curve + trigger byte does NOT apply
         # arbitrary duty: trigger value 4 turns boost on and oscillates the fan.
         level = min(5, max(1, round(duty / 10)))
-        self.write_ecram(EC_MAFAN_CONTROL, 128 + level)
+        target = 128 + level
+        current = self.read_ecram(EC_MAFAN_CONTROL)
+        if current == target:
+            return level * 10
+        if current != EC_NORMAL:
+            # The EC ignores level writes while another mode (e.g. boost) is
+            # active; pass through Normal first so the level byte sticks.
+            self.write_ecram(EC_MAFAN_CONTROL, EC_NORMAL)
+        self.write_ecram(EC_MAFAN_CONTROL, target)
         return level * 10
 
     def restore_auto(self) -> None:
-        self.write_ecram(EC_MAFAN_CONTROL, EC_NORMAL)
+        if self.read_ecram(EC_MAFAN_CONTROL) != EC_NORMAL:
+            self.write_ecram(EC_MAFAN_CONTROL, EC_NORMAL)
 
     def control_once(self) -> None:
         with self.lock:
