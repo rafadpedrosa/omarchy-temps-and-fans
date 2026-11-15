@@ -1,5 +1,12 @@
 # Omarchy Thermals & Fans
 
+Adapted fork: fan control for Tongfang/Uniwill-EC laptops (tested on Avell A40 LIV) that expose no `pwmN` hwmon. The daemon drives the fans over the WMI `AcpiTest_MULong` interface via `acpi_call` (kernel module `acpi_call-dkms` required; the daemon runs as root so no sudo needed at runtime).
+
+Controls: EC control byte 1873 — `0` = auto, `0x40` = boost, `0x81..0x85` = fixed levels; arbitrary duty via PWM curve (L1–L5 @ 1859–1863) + trigger byte 1885. Duty scale is 0–200.
+
+Original README below.
+
+---
 An Omarchy bar widget for direct Linux `hwmon` telemetry and optional CPU-temperature fan control. It displays CPU state, GPU temperatures and fan RPM, memory-module temperatures, NVMe temperatures, motherboard sensors, and CPU/case fan state.
 
 The widget is useful immediately after installation: read-only telemetry needs no daemon, account, network access, or elevated privileges. Fan controls become available when the small companion service is installed.

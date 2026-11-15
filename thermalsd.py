@@ -7,6 +7,7 @@ import argparse
 import grp
 import json
 import os
+import re
 import signal
 import socketserver
 import threading
@@ -17,6 +18,24 @@ from pathlib import Path
 DEFAULT_CONFIG = Path("/etc/omarchy-thermals/config.json")
 DEFAULT_STATE = Path("/var/lib/omarchy-thermals/state.json")
 DEFAULT_SOCKET = Path("/run/omarchy-thermals/control.sock")
+
+
+# EC access over the Tongfang/Uniwill WMI interface (AcpiTest_MULong), via acpi_call.
+# The daemon runs as root, so /proc/acpi/call needs no sudo. Verified empirically on
+# an Avell A40 LIV (Tongfang chassis): control byte 1873 accepts Normal=0, Boost=64,
+# and fixed levels 0x81..0x85 (EC duty 60..100 on the 0-200 scale); the PWM curve
+# addresses L1-L5 plus the fan trigger byte give arbitrary duty, audibly weaker above
+# level 5 on this unit but accepted by the EC.
+WMI_ACPI_CLASS = "\\_SB.AMW0.WMBC"
+EC_MAFAN_CONTROL = 1873
+EC_TRIGGER = 1885
+EC_FAN_PWM_BASE = 1858  # L1..L5 live at 1859..1863
+EC_FAN_SPEED = 0x1804
+
+EC_NORMAL = 0
+EC_BOOST = 64
+EC_CUSTOM_HIMODE = 160
+EC_TRIGGER_FAN = 4
 
 
 def read_number(path: Path) -> float | None:
@@ -152,17 +171,43 @@ class Controller:
         if energy is not None and maximum is not None:
             self.energy_sample = (energy, now, maximum)
 
+    @staticmethod
+    def _wmi_call(value: int) -> int:
+        call_path = Path("/proc/acpi/call")
+        call_path.write_text(f"{WMI_ACPI_CLASS} 0 4 {value}\n")
+        response = call_path.read_text().strip()
+        try:
+            return int(response.strip().split("\x00")[0], 16)
+        except ValueError:
+            # "{0xa0, 0x6c, ...}" buffer: little-endian, take the low byte below
+            pass
+        bytes_hex = re.findall(r"0x[0-9a-fA-F]+", response)
+        data = bytes(int(item, 16) for item in bytes_hex)
+        return int.from_bytes(data, "little")
+
+    @staticmethod
+    def read_ecram(address: int) -> int:
+        return Controller._wmi_call(0x10000000000 + address) & 255
+
+    @staticmethod
+    def write_ecram(address: int, value: int) -> None:
+        Controller._wmi_call((value << 16) + address)
+
     def apply_duty(self, role: str, duty: int) -> None:
-        controller = self.controller_path()
-        channel = self.config.get("fans", {}).get(role)
-        if not controller or channel is None:
-            raise RuntimeError(f"No {role} fan channel is configured")
-        pwm = controller / f"pwm{int(channel)}"
-        enable = controller / f"pwm{int(channel)}_enable"
-        if not pwm.exists():
-            raise RuntimeError(f"Missing PWM channel: {pwm}")
-        enable.write_text("1\n")
-        pwm.write_text(f"{round(max(0, min(100, duty)) * 255 / 100)}\n")
+        del role  # both fans are driven by the same EC control byte
+        duty = max(0, min(100, int(duty)))
+        if duty >= 90:
+            # Safety hand-off: near 100% duty, use the EC's native boost instead.
+            self.write_ecram(EC_MAFAN_CONTROL, EC_BOOST)
+            return
+        ec_duty = round(duty * 2)  # EC duty scale is 0-200
+        self.write_ecram(EC_MAFAN_CONTROL, EC_CUSTOM_HIMODE)
+        for level in range(1, 6):
+            self.write_ecram(EC_FAN_PWM_BASE + level, ec_duty)
+        self.write_ecram(EC_TRIGGER, EC_TRIGGER_FAN)
+
+    def restore_auto(self) -> None:
+        self.write_ecram(EC_MAFAN_CONTROL, EC_NORMAL)
 
     def control_once(self) -> None:
         with self.lock:
@@ -196,12 +241,13 @@ class Controller:
                     self.last_error = str(error)
 
     def fan_info(self, role: str) -> dict:
-        controller = self.controller_path()
-        channel = self.config.get("fans", {}).get(role)
-        rpm = read_number(controller / f"fan{channel}_input") if controller and channel is not None else None
+        try:
+            speed = self.read_ecram(EC_FAN_SPEED)
+        except (OSError, ValueError):
+            speed = None
         return {
             "duty": self.last_duties.get(role),
-            "rpm": None if rpm is None else round(rpm),
+            "rpm": None if speed is None else round(speed),
             "mode": self.state["modes"].get(role, "unavailable"),
         }
 
@@ -346,11 +392,13 @@ def main() -> None:
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
-        # Leaving a low manual PWM behind after uninstall/service failure is unsafe.
-        for role in ("cpu", "case"):
+        # Leaving the fans in a forced manual state after service failure is unsafe.
+        try:
+            controller.restore_auto()
+        except (OSError, ValueError):
             try:
-                controller.apply_duty(role, 100)
-            except (OSError, RuntimeError):
+                controller.apply_duty("cpu", 100)
+            except (OSError, ValueError):
                 pass
         server.server_close()
         args.socket.unlink(missing_ok=True)
