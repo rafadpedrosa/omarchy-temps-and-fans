@@ -308,6 +308,34 @@ Panel {
               }
             }
 
+            Flow {
+              width: parent.width
+              spacing: Style.space(6)
+              Repeater {
+                model: [
+                  { duty: 30, label: "30%" },
+                  { duty: 40, label: "40%" },
+                  { duty: 50, label: "50%" },
+                  { duty: 60, label: "60%" },
+                  { duty: 70, label: "70%" },
+                  { duty: 100, label: "Boost" }
+                ]
+                Button {
+                  required property var modelData
+                  text: modelData.label
+                  selected: root.cpuPreview === modelData.duty
+                  bordered: true
+                  enabled: root.snapshot.ok && root.snapshot.backend === "direct" && !root.busy && root.cpuTemp < 85
+                  foreground: root.bar.foreground
+                  fontFamily: root.bar.fontFamily
+                  onClicked: {
+                    root.cpuPreview = modelData.duty
+                    root.runAction(["manual", "cpu", String(modelData.duty)])
+                  }
+                }
+              }
+            }
+
             FanSlider {
               id: cpuFanRow
               title: "Fan"
