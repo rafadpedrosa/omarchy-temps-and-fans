@@ -320,6 +320,15 @@ Panel {
               onCommitted: function(value) { root.cpuPreview = value; root.runAction(["manual", "cpu", String(value)]) }
             }
 
+            Text {
+              width: parent.width
+              text: "O EC aceita apenas degraus: 30 · 40 · 50 · 60 · 70 · 100% (boost). O valor aplicado é o degrau mais próximo."
+              color: Qt.darker(root.bar.foreground, 1.5)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.Wrap
+            }
+
             PanelSectionHeader { text: "PROFILE"; foreground: root.bar.foreground; fontFamily: root.bar.fontFamily }
             Flow {
               width: parent.width
