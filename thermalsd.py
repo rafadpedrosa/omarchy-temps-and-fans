@@ -22,20 +22,16 @@ DEFAULT_SOCKET = Path("/run/omarchy-thermals/control.sock")
 
 # EC access over the Tongfang/Uniwill WMI interface (AcpiTest_MULong), via acpi_call.
 # The daemon runs as root, so /proc/acpi/call needs no sudo. Verified empirically on
-# an Avell A40 LIV (Tongfang chassis): control byte 1873 accepts Normal=0, Boost=64,
-# and fixed levels 0x81..0x85 (EC duty 60..100 on the 0-200 scale); the PWM curve
-# addresses L1-L5 plus the fan trigger byte give arbitrary duty, audibly weaker above
-# level 5 on this unit but accepted by the EC.
+# an Avell A40 LIV (Tongfang chassis): control byte 1873 accepts Normal=0, Boost=64
+# and the five fixed levels 0x81..0x85 (EC duty 60..100 on the 0-200 scale).
+# Arbitrary PWM/curve writes are accepted by the EC registers but the trigger byte
+# used to apply them turns boost on instead, so they are not used.
 WMI_ACPI_CLASS = "\\_SB.AMW0.WMBC"
 EC_MAFAN_CONTROL = 1873
-EC_TRIGGER = 1885
-EC_FAN_PWM_BASE = 1858  # L1..L5 live at 1859..1863
 EC_FAN_SPEED = 0x1804
 
 EC_NORMAL = 0
 EC_BOOST = 64
-EC_CUSTOM_HIMODE = 160
-EC_TRIGGER_FAN = 4
 
 
 def read_number(path: Path) -> float | None:
@@ -197,17 +193,18 @@ class Controller:
         # Single-fan notebook: both roles share the same EC control byte, so only
         # one write is ever issued per control cycle (role "cpu").
         if role != "cpu":
-            return
+            return 0
         duty = max(0, min(100, int(duty)))
         if duty >= 90:
-            # Safety hand-off: near 100% duty, use the EC's native boost instead.
+            # Near 100% duty, use the EC's native boost instead of the levels.
             self.write_ecram(EC_MAFAN_CONTROL, EC_BOOST)
-            return
-        ec_duty = round(duty * 2)  # EC duty scale is 0-200
-        self.write_ecram(EC_MAFAN_CONTROL, EC_CUSTOM_HIMODE)
-        for level in range(1, 6):
-            self.write_ecram(EC_FAN_PWM_BASE + level, ec_duty)
-        self.write_ecram(EC_TRIGGER, EC_TRIGGER_FAN)
+            return 100
+        # The EC only honors its 5 fixed fan levels here (duty 60/70/80/90/100 on
+        # the 0-200 scale). Writing the PWM curve + trigger byte does NOT apply
+        # arbitrary duty: trigger value 4 turns boost on and oscillates the fan.
+        level = min(5, max(1, round(duty / 10)))
+        self.write_ecram(EC_MAFAN_CONTROL, 128 + level)
+        return level * 10
 
     def restore_auto(self) -> None:
         self.write_ecram(EC_MAFAN_CONTROL, EC_NORMAL)
@@ -246,8 +243,8 @@ class Controller:
                 return
             duty = duties.get("cpu", 100)
             try:
-                self.apply_duty("cpu", duty)
-                self.last_duties = {"cpu": duty, "case": duty}
+                effective = self.apply_duty("cpu", duty)
+                self.last_duties = {"cpu": effective, "case": effective}
             except (OSError, ValueError, RuntimeError) as error:
                 self.last_error = str(error)
 
